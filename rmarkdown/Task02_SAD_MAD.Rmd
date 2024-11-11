@@ -1,0 +1,89 @@
+---
+title: "Population PK"
+author: "Hans Brunner"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load libraries and data, error = TRUE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(xgxr)
+library(readr)
+library(caTools)
+library(patchwork)
+library(nlme)
+
+pkpd_data <- read_csv('../data/Single_Ascending_Dose_Dataset2.csv')
+
+pkpd_data = pkpd_data %>%
+  arrange(DOSE) %>%
+  mutate(TRTACT_low2high = factor(TRTACT, levels = unique(TRTACT)),
+         TRTACT_high2low = factor(TRTACT, levels = rev(unique(TRTACT)))) %>%
+  select(-TRTACT)
+
+pk_data <- pkpd_data %>%
+  filter(CMT==2)
+```
+
+```{r cars}
+# Population PK using Mixed effects models
+```{r pressure, echo=FALSE, error = TRUE, warning=FALSE, message=FALSE}
+library(nlme)
+
+pk_data <- pk_data %>%
+  filter(!is.na(LIDV), !is.nan(LIDV))
+
+pk_data$SEX <- as.factor(pk_data$SEX)
+# Nonlinear mixed effects model
+pk_model <- nlme(
+  LIDV ~ DOSE / (Vd * exp(-CL/Vd * TIME)),  # One-compartment model
+  data = pk_data,
+  fixed = list(CL + Vd ~ 1),                 # Fixed effects for CL and Vd
+  random = list(ID = pdDiag(CL + Vd ~ 1)),   # Random effects by individual (ID)
+  start = c(CL = 5, Vd = 50),                # Initial estimates for CL and Vd
+  control = list(msMaxIter = 100)
+)
+
+summary(pk_model)
+
+# Population averages
+fixed_effects <- fixef(pk_model)
+print(fixed_effects)
+
+# Variability
+random_effects <- VarCorr(pk_model)
+print(random_effects)
+
+
+
+# Covariates
+pk_model_cov <- update(pk_model, fixed = list(CL + Vd ~ WEIGHTB + SEX))
+summary(pk_model_cov)
+
+# Bayes estimates
+individual_estimates <- ranef(pk_model)
+print(individual_estimates)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
